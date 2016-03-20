@@ -79,6 +79,10 @@ vector<string> orderedMACs;
 map<string, int> MACcolors;
 int current_color = 1;
 
+WINDOW *header_box;
+WINDOW *graph_box;
+WINDOW *footer_box;
+
 void wipeData(){
     for(auto& x : activeMACs){
         x.second.first = 0;
@@ -109,7 +113,7 @@ void processData(vector<string> data){
             activeMACs[MAC] = p;
             orderedMACs.push_back(MAC);
             MACcolors[MAC] = current_color++;
-            if (current_color > 7) {
+            if (current_color > 6) {
                 current_color = 1;
             }
             
@@ -188,26 +192,34 @@ void printDataNCtest(){
     
     for (auto& x : orderedMACs){
         if (isActive(x, 10)) {
-            attron(COLOR_PAIR(MACcolors[x]));
-            attron(A_BOLD);
+//            wattron(local_win, COLOR_PAIR(MACcolors[x]));
+//            wattron(local_win, A_BOLD);
             
             for(int j = 0; j < activeMACs[x].first; j++){
-                printw("|");
+//                wprintw(local_win, "|");
             }
-            attroff(A_BOLD);
+//            wattroff(local_win, A_BOLD);
             
             if (activeMACs[x].first < 1) {
-                printw("|");
+//                printw("|");
+//                wprintw(local_win, "|");
             }
             
-            attroff(COLOR_PAIR(MACcolors[x]));
+//            wattroff(local_win, COLOR_PAIR(MACcolors[x]));
             
-            refresh();
-
+//            refresh();
+            
         }
         
     }
-    printw("\n");
+//    printw("\n");
+//    wprintw(local_win, "\n");
+    
+//    refresh();
+    
+//    wrefresh(local_win);
+    wrefresh(footer_box);
+
     
 }
 
@@ -310,23 +322,51 @@ int main(){
     {	endwin();
         printf("Your terminal does not support change of colors\n");
         exit(1);
-    }
-    start_color();
+    } start_color();
     init_pair(1,1, COLOR_BLACK);
     init_pair(2,2, COLOR_BLACK);
     init_pair(3,3, COLOR_BLACK);
     init_pair(4,4, COLOR_BLACK);
     init_pair(5,5, COLOR_BLACK);
     init_pair(6,6, COLOR_BLACK);
-    init_pair(7,7, COLOR_BLACK);
     curs_set(0);
+    
     scrollok(stdscr, TRUE);
     
+    int window_x, window_y;
+    getmaxyx(stdscr, window_y, window_x);
+    
+    ///HEADER::
+    header_box = newwin(3, window_x, 0, 0);
+    scrollok(header_box, TRUE);
+//    box(header_box, 0 , 0);		/* 0, 0 gives default characters
+//                                 * for the vertical and horizontal
+//                                 * lines			*/
+    
+    
+    wborder(header_box, 1, 1, 1, 0, 1, 1, 1, 1);
+    wrefresh(header_box);		/* Show that box 		*/
+//    footer_box
+    
+    //MAIN WINDOW:
+    graph_box = newwin(window_y - 5, window_x, 3, 0);
+    box(graph_box, 0 , 0);
+    wrefresh(graph_box);
+    
+    //FOOTER:
+    footer_box = newwin(2, window_x, window_y-2, 0);
+    //    box(header_box, 0 , 0);		/* 0, 0 gives default characters
+    //                                 * for the vertical and horizontal
+    //                                 * lines			*/
+    wborder(footer_box, 1, 1, 0, 1, 1, 1, 1, 1);
+//    move(1,0);
+    mvwprintw(footer_box,1,( window_x - 25 )/2, "project by leoneckert.com");
+    wrefresh(footer_box);		/* Show that box 		*/
     
     
     startSniffing("en0", true);
     
-//    getch();
-//    endwin();
-//    return 0;
+    getch();
+    endwin();
+    return 0;
 }
