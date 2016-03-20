@@ -16,6 +16,7 @@
 #include <ncurses.h>
 
 
+
 using namespace Tins;
 using namespace std;
 
@@ -74,9 +75,9 @@ vector<string> returnFromData11(const Packet& pkt){
 
 
 map<string, pair<int, long>> activeMACs;
-//map<string, vector<int>> MACcolors;
-//vector<string> orderedMACs;
-
+vector<string> orderedMACs;
+map<string, int> MACcolors;
+int current_color = 1;
 
 void wipeData(){
     for(auto& x : activeMACs){
@@ -88,11 +89,11 @@ long currentTime(){
     return time(&timev);
 }
 
-string isActive(const string& MAC, long KillThreshold){
+bool isActive(const string& MAC, long KillThreshold){
     if (currentTime() - activeMACs[MAC].second >= KillThreshold){
-        return "NO";
+        return false;
     }else{
-        return "YES";
+        return true;
     }
 }
 
@@ -106,9 +107,13 @@ void processData(vector<string> data){
             //not found:
             pair <int,long> p (1,timestamp);
             activeMACs[MAC] = p;
-//            push color into here: MACcolors(MAC)
+            orderedMACs.push_back(MAC);
+            MACcolors[MAC] = current_color++;
+            if (current_color > 7) {
+                current_color = 1;
+            }
             
-//            orderedMACs.push_back(MAC);
+            
             // perhaps also put on ordered array
         }else{
             //found:
@@ -136,8 +141,12 @@ void printData(){
     cout << endl;
 }
 
+
 void printDataNC(){
     start_color();
+    
+
+    
     init_pair(1,COLOR_RED, COLOR_BLACK);
     init_pair(2,COLOR_CYAN, COLOR_BLACK);
     init_pair(3,COLOR_YELLOW, COLOR_BLACK);
@@ -172,6 +181,36 @@ void printDataNC(){
     
     
 }
+
+
+void printDataNCtest(){
+
+    
+    for (auto& x : orderedMACs){
+        if (isActive(x, 10)) {
+            attron(COLOR_PAIR(MACcolors[x]));
+            attron(A_BOLD);
+            
+            for(int j = 0; j < activeMACs[x].first; j++){
+                printw("|");
+            }
+            attroff(A_BOLD);
+            
+            if (activeMACs[x].first < 1) {
+                printw("|");
+            }
+            
+            attroff(COLOR_PAIR(MACcolors[x]));
+            
+            refresh();
+
+        }
+        
+    }
+    printw("\n");
+    
+}
+
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -212,23 +251,28 @@ void startSniffing(std::string _interface, bool monitorMode){
     
     
     // now sniff:
-//    int print_interval = 1; // in seconds
-//    long timeTrack = currentTime();
+    int print_interval = 1; // in seconds
+    long timeTrack = currentTime();
     
     try {
         int c = 0;
         while(Packet pkt = sniffer.next_packet()) {
             
             vector<string> pktData = returnFromData11(pkt);
-//            for (auto& s : pktData){
-//                cout << s << endl;
+            processData(pktData); //creates map with times and timestamp
+            
+            //print processed data:
+//            for (auto& s : activeMACs){
+//                cout << s.first << " || last active: " << setw(3) << currentTime() - s.second.second << " seconds ago" << " || active: " << isActive(s.first, 10) << " || colorpair: " << MACcolors[s.first] << endl;
 //            }
-            processData(pktData); //creates map with times
-            for (auto& s : activeMACs){
-                cout << s.first << " || last active: " << currentTime() - s.second.second << " seconds ago" << " || active: " << isActive(s.first, 10) << endl;
-            }
-            cout << "-----------" << endl;
-//            updateDataMap(10); // takes out non active MACs
+//            cout << "---" << endl;
+//            for (auto& s : orderedMACs){
+//                cout << s << " | ";
+//            }
+//            cout << endl;
+//            cout << "-----------" << endl;
+            
+            
 //
 //            
 //            
@@ -239,11 +283,12 @@ void startSniffing(std::string _interface, bool monitorMode){
 //            }
 //            c ++;
             
-//            if (currentTime() - timeTrack > print_interval){
+            if (currentTime() - timeTrack > print_interval){
 //                printDataNC();
-//                wipeData();
-//                timeTrack = currentTime();
-//            }
+                printDataNCtest();
+                wipeData();
+                timeTrack = currentTime();
+            }
 
             
         }
@@ -255,9 +300,29 @@ void startSniffing(std::string _interface, bool monitorMode){
 
 int main(){
     //ncurses:
-//    initscr();
-//    curs_set(0);
-//    scrollok(stdscr, TRUE);
+    initscr();
+    if(has_colors() == FALSE)
+    {	endwin();
+        printf("Your terminal does not support color\n");
+        exit(1);
+    }
+    if(can_change_color() == FALSE)
+    {	endwin();
+        printf("Your terminal does not support change of colors\n");
+        exit(1);
+    }
+    start_color();
+    init_pair(1,1, COLOR_BLACK);
+    init_pair(2,2, COLOR_BLACK);
+    init_pair(3,3, COLOR_BLACK);
+    init_pair(4,4, COLOR_BLACK);
+    init_pair(5,5, COLOR_BLACK);
+    init_pair(6,6, COLOR_BLACK);
+    init_pair(7,7, COLOR_BLACK);
+    curs_set(0);
+    scrollok(stdscr, TRUE);
+    
+    
     
     startSniffing("en0", true);
     
