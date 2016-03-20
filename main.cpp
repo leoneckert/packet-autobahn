@@ -14,6 +14,7 @@
 #include <sstream>
 #include <map>
 #include <ncurses.h>
+#include <math.h>
 
 
 
@@ -22,13 +23,13 @@ using namespace std;
 
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
-//////////////////[ Get Src ]///////////////////
+//////////////////[ Get Dst ]///////////////////
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
-string get_src_from_pdu(const PDU &pdu){
+string get_dst_from_pdu(const PDU &pdu){
     const Dot11Data &dot11Data = pdu.rfind_pdu<Dot11Data>();
-    string src = dot11Data.src_addr().to_string();
-    return src;
+    string dst = dot11Data.dst_addr().to_string();
+    return dst;
 }
 
 ////////////////////////////////////////////////
@@ -59,7 +60,7 @@ vector<string> returnFromData11(const Packet& pkt){
     // if yes, get the rawPDU and do something with it
     try{
         
-        string MAC = get_src_from_pdu(pdu);
+        string MAC = get_dst_from_pdu(pdu);
         output.push_back(MAC);
         string timestamp = get_timestamp_from_pkt(pkt);
         output.push_back(timestamp);
@@ -77,16 +78,19 @@ vector<string> returnFromData11(const Packet& pkt){
 map<string, pair<int, long>> activeMACs;
 vector<string> orderedMACs;
 map<string, int> MACcolors;
+int numpackets = 0;
 int current_color = 1;
-
+int activeThreshold = 10;
 WINDOW *header_box;
 WINDOW *graph_box;
 WINDOW *footer_box;
+int columns_for_header = 0;
 
 void wipeData(){
     for(auto& x : activeMACs){
         x.second.first = 0;
     }
+    numpackets = 0;
 }
 long currentTime(){
     time_t  timev;
@@ -99,6 +103,15 @@ bool isActive(const string& MAC, long KillThreshold){
     }else{
         return true;
     }
+}
+int getNumOfActive(){
+    int n = 0;
+    for (auto& x : orderedMACs) {
+        if (isActive(x, activeThreshold)) {
+            n++;
+        }
+    }
+    return n;
 }
 
 void processData(vector<string> data){
@@ -117,109 +130,125 @@ void processData(vector<string> data){
                 current_color = 1;
             }
             
-            
             // perhaps also put on ordered array
         }else{
             //found:
             activeMACs[MAC].first += 1;
             activeMACs[MAC].second = timestamp;
         }
+        
+        numpackets ++;
     }
 }
 
+int resolution = 1;
 
-void printData(){
-    string s = ":";
-    for(auto x : activeMACs){
-        //        cout << x.first << ": ";
-        if (s == ":") {
-            s = "|";
-        }else if (s == "|"){
-            s = ":";
-        }
-        for(int j = 0; j < x.second.first/3; j++){
-            //            cout << "|";
-            cout << s;
+
+void drawHeader(){
+    wclear(header_box);
+    
+    wborder(header_box, 1, 1, 1, 0, 1, 1, 1, 1);
+    int window_x, window_y;
+    getmaxyx(stdscr, window_y, window_x);
+    int MACsPerLine = floor(window_x/20);
+    int MACcount = 0;
+    wprintw(header_box, "Active Devices (last %d seconds):\n", activeThreshold);
+    for (auto& x : orderedMACs){
+        if (isActive(x, activeThreshold)) {
+            wattron(header_box, COLOR_PAIR(MACcolors[x]));
+            wprintw(header_box, x.c_str());
+            wattroff(header_box, COLOR_PAIR(MACcolors[x]));
+            
+            wprintw(header_box, "   ");
+            MACcount++;
+            if (MACcount > MACsPerLine-1) {
+                MACcount = 0;
+                wprintw(header_box, "\n");
+            }
+            
         }
     }
-    cout << endl;
+    mvwprintw(header_box, columns_for_header - 2, 0, "Resolution: %d   (change with arrow keys)", resolution);
+//    mvwprintw(header_box, columns_for_header - 2, 0, "\n\nResolution: \"|\" symbol represents %d packets. (change with arrow keys)", resolution);
+    
+    wrefresh(header_box);
 }
 
+bool first_Graph = true;
 
-void printDataNC(){
-    start_color();
-    
-
-    
-    init_pair(1,COLOR_RED, COLOR_BLACK);
-    init_pair(2,COLOR_CYAN, COLOR_BLACK);
-    init_pair(3,COLOR_YELLOW, COLOR_BLACK);
-    
-    int a = 1;
-    for(auto x : activeMACs){
-        if (a == 1) {
-            attron(COLOR_PAIR(1));
-            a++;
-        }else if (a == 2){
-            attron(COLOR_PAIR(2));
-            a++;
-        }else if (a == 3){
-            attron(COLOR_PAIR(3));
-            a = 1;
-        }
-        attron(A_BOLD);
+void drawGraph(){
+    if (first_Graph) {
+        init_pair(7, COLOR_BLACK, COLOR_WHITE);
+        wattron(graph_box, COLOR_PAIR(7));
+        wprintw(graph_box, "\n\n\n\n\n\n\n\n\n\n\n                                    \n");
+//        wprintw(graph_box, "\n\n\n\n\n\n\n\n\n\n\n----------------------------------\n");
+        wprintw(graph_box, " Wilkommen auf der Packet Autobahn! \n");
+        wprintw(graph_box, "                                    \n\n");
+        wattroff(graph_box, COLOR_PAIR(7));
+        wprintw(graph_box, "A little explanation:");
+        wprintw(graph_box, "\n\n\"Resolution\" defines how many packets are represented by a \"|\" symbol.");
+        wprintw(graph_box, "\n\nThe Graph is updated every second and visualises data packets as they \nare received by individual devices on the Wifi channel you are curretnly on.");
         
-        
-        for(int j = 0; j < x.second.first/3; j++){
-            
-            printw("|");
-            
-            
-        }
-        attroff(COLOR_PAIR(1));
-        attroff(A_BOLD);
-        refresh();
+        wprintw(graph_box, "\n\n\n\n\n\n\n\n\n\n");
+        first_Graph = false;
     }
-    printw("\n");
-    //    cout << endl;
+    for (auto& x : orderedMACs){
+        if (isActive(x, activeThreshold)) {
+            wattron(graph_box, COLOR_PAIR(MACcolors[x]));
+            wattron(graph_box, A_BOLD);
+            
+            int c = 0;
+            for(int j = 0; j < activeMACs[x].first; j++){
+                c++;
+                if (c >= resolution) {
+                    c = 0;
+                    wprintw(graph_box, "|");
+                }
+            }
+            wattroff(graph_box, A_BOLD);
+            wattroff(graph_box, COLOR_PAIR(MACcolors[x]));
+        }
+        
+    }
+    wprintw(graph_box, "\n");
+    wrefresh(graph_box);
+}
+
+void resize_windows(){
+    
+    int window_x, window_y;
+    getmaxyx(stdscr, window_y, window_x);
+    
+    columns_for_header = 0;
+    int numOf20sNeeded = getNumOfActive();
+    while (numOf20sNeeded > 0) {
+        columns_for_header++;
+        numOf20sNeeded = numOf20sNeeded - floor(window_x/20);
+    }
+    columns_for_header += 4;
+    
+    wclear(header_box);
+    wrefresh(header_box);
+    wclear(footer_box);
+    wrefresh(footer_box);
+    
+    delwin(header_box);
+    header_box = newwin(columns_for_header, window_x, 0, 0);
+//    wborder(header_box, 1, 1, 1, 0, 1, 1, 1, 1);
+    wrefresh(header_box);
+    
+    wborder(footer_box, 1, 1, 0, 1, 1, 1, 1, 1);
+    mvwprintw(footer_box,1,( window_x - 25 )/2, "project by leoneckert.com");
+    wrefresh(footer_box);		/* Show that box 		*/
     
     
 }
 
 
 void printDataNCtest(){
-
-    
-    for (auto& x : orderedMACs){
-        if (isActive(x, 10)) {
-//            wattron(local_win, COLOR_PAIR(MACcolors[x]));
-//            wattron(local_win, A_BOLD);
-            
-            for(int j = 0; j < activeMACs[x].first; j++){
-//                wprintw(local_win, "|");
-            }
-//            wattroff(local_win, A_BOLD);
-            
-            if (activeMACs[x].first < 1) {
-//                printw("|");
-//                wprintw(local_win, "|");
-            }
-            
-//            wattroff(local_win, COLOR_PAIR(MACcolors[x]));
-            
-//            refresh();
-            
-        }
-        
-    }
-//    printw("\n");
-//    wprintw(local_win, "\n");
-    
-//    refresh();
-    
-//    wrefresh(local_win);
-    wrefresh(footer_box);
-
+    resize_windows();
+    drawGraph();
+    drawHeader();
     
 }
 
@@ -249,7 +278,18 @@ void printDataNCtest(){
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int kbhit()
+{
+  
+    int ch = getch();
 
+    if (ch != ERR) {
+        ungetch(ch);
+        return 1;
+    } else {
+        return 0;
+    }
+}
 
 void startSniffing(std::string _interface, bool monitorMode){
     
@@ -260,48 +300,41 @@ void startSniffing(std::string _interface, bool monitorMode){
     config.set_rfmon(monitorMode);
     Sniffer sniffer(interface, config);
     
-    
-    
-    // now sniff:
+    //timeing:
     int print_interval = 1; // in seconds
     long timeTrack = currentTime();
     
+    
+    // now sniff:
     try {
-        int c = 0;
         while(Packet pkt = sniffer.next_packet()) {
             
             vector<string> pktData = returnFromData11(pkt);
             processData(pktData); //creates map with times and timestamp
             
-            //print processed data:
-//            for (auto& s : activeMACs){
-//                cout << s.first << " || last active: " << setw(3) << currentTime() - s.second.second << " seconds ago" << " || active: " << isActive(s.first, 10) << " || colorpair: " << MACcolors[s.first] << endl;
-//            }
-//            cout << "---" << endl;
-//            for (auto& s : orderedMACs){
-//                cout << s << " | ";
-//            }
-//            cout << endl;
-//            cout << "-----------" << endl;
-            
-            
-//
-//            
-//            
-//            if (c > 600){
-//                printDataNC();
-//                c = 0;
-//                wipeData();
-//            }
-//            c ++;
-            
-            if (currentTime() - timeTrack > print_interval){
-//                printDataNC();
-                printDataNCtest();
-                wipeData();
-                timeTrack = currentTime();
-            }
 
+            
+            
+
+            if (kbhit()) {
+                int g = getch();
+                if(g == 65){
+                    resolution += 10;
+                    wprintw(graph_box, "new resolution: %d\n", resolution);
+                    wrefresh(graph_box);
+                }else if(g == 66){
+                    resolution -= 10;
+                    if (resolution < 11) resolution = 1;
+                    wprintw(graph_box, "new resolution: %d\n", resolution);
+                    wrefresh(graph_box);
+                }
+            }else{
+                if (currentTime() - timeTrack > print_interval){
+                    printDataNCtest();
+                    wipeData();
+                    timeTrack = currentTime();
+                }
+            }
             
         }
     }catch(...){}
@@ -313,6 +346,11 @@ void startSniffing(std::string _interface, bool monitorMode){
 int main(){
     //ncurses:
     initscr();
+    
+    cbreak();
+    noecho();
+    nodelay(stdscr, TRUE);
+    
     if(has_colors() == FALSE)
     {	endwin();
         printf("Your terminal does not support color\n");
@@ -331,42 +369,26 @@ int main(){
     init_pair(6,6, COLOR_BLACK);
     curs_set(0);
     
-    scrollok(stdscr, TRUE);
-    
     int window_x, window_y;
     getmaxyx(stdscr, window_y, window_x);
     
-    ///HEADER::
-    header_box = newwin(3, window_x, 0, 0);
-    scrollok(header_box, TRUE);
-//    box(header_box, 0 , 0);		/* 0, 0 gives default characters
-//                                 * for the vertical and horizontal
-//                                 * lines			*/
-    
-    
-    wborder(header_box, 1, 1, 1, 0, 1, 1, 1, 1);
-    wrefresh(header_box);		/* Show that box 		*/
-//    footer_box
-    
-    //MAIN WINDOW:
-    graph_box = newwin(window_y - 5, window_x, 3, 0);
-    box(graph_box, 0 , 0);
+
+//    MAIN WINDOW:
+    graph_box = newwin(window_y - 5, window_x, 0, 0);
+    scrollok(graph_box, TRUE);
+//    mvwprintw(graph_box, window_y/2, 0, "Wilkommen auf der Packet Autobahn!\n\n");
+//    box(graph_box, 0 , 0);
     wrefresh(graph_box);
     
-    //FOOTER:
     footer_box = newwin(2, window_x, window_y-2, 0);
-    //    box(header_box, 0 , 0);		/* 0, 0 gives default characters
-    //                                 * for the vertical and horizontal
-    //                                 * lines			*/
-    wborder(footer_box, 1, 1, 0, 1, 1, 1, 1, 1);
-//    move(1,0);
-    mvwprintw(footer_box,1,( window_x - 25 )/2, "project by leoneckert.com");
+//    wborder(footer_box, 1, 1, 0, 1, 1, 1, 1, 1);
+//    mvwprintw(footer_box,1,( window_x - 25 )/2, "project by leoneckert.com");
     wrefresh(footer_box);		/* Show that box 		*/
-    
+
     
     startSniffing("en0", true);
     
-    getch();
+
     endwin();
     return 0;
 }
