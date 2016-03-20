@@ -19,9 +19,6 @@
 using namespace Tins;
 using namespace std;
 
-
-
-
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
 //////////////////[ Get Src ]///////////////////
@@ -30,22 +27,8 @@ using namespace std;
 string get_src_from_pdu(const PDU &pdu){
     const Dot11Data &dot11Data = pdu.rfind_pdu<Dot11Data>();
     string src = dot11Data.src_addr().to_string();
-    
     return src;
 }
-////////////////////////////////////////////////
-////////////////////////////////////////////////
-//////////////////[ Get Dst ]///////////////////
-////////////////////////////////////////////////
-////////////////////////////////////////////////
-string get_dst_from_pdu(const PDU &pdu){
-    const Dot11Data &dot11Data = pdu.rfind_pdu<Dot11Data>();
-    string dst = dot11Data.dst_addr().to_string();
-    
-    return dst;
-}
-
-
 
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
@@ -54,10 +37,10 @@ string get_dst_from_pdu(const PDU &pdu){
 ////////////////////////////////////////////////
 
 string get_timestamp_from_pkt(const Packet& pkt){
-    long timestamp = pkt.timestamp().seconds();
+//    long timestamp = pkt.timestamp().seconds();
     string ts;
     stringstream strstream;
-    strstream << timestamp;
+    strstream << pkt.timestamp().seconds();
     strstream >> ts;
     return ts;
 }
@@ -67,7 +50,7 @@ string get_timestamp_from_pkt(const Packet& pkt){
 ////[ Get Requested Info from Data11 pkt ]//////
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
-vector<string> returnFromData11(vector<string> infoRequested, const Packet& pkt){
+vector<string> returnFromData11(const Packet& pkt){
     vector<string> output;
     // here is where we do stuff with packets:
     const PDU& pdu = *pkt.pdu();
@@ -75,48 +58,78 @@ vector<string> returnFromData11(vector<string> infoRequested, const Packet& pkt)
     // if yes, get the rawPDU and do something with it
     try{
         
-        
-        for (string& s : infoRequested){
-            if (s == "src") {
-                string MAC = get_src_from_pdu(pdu);
-//                if (MAC == "e8:fc:af:f6:92:d0") {
-//                    output.push_back(MAC);
-//                }
-                output.push_back(MAC);
-                
-            }else if( s == "timestamp"){
-                string timestamp = get_timestamp_from_pkt(pkt);
-                output.push_back(timestamp);
-            }else if (s == "dst"){
-                string dst = get_dst_from_pdu(pdu);
-                output.push_back(dst);
-            }
-        }
+        string MAC = get_src_from_pdu(pdu);
+        output.push_back(MAC);
+        string timestamp = get_timestamp_from_pkt(pkt);
+        output.push_back(timestamp);
         
     }catch(...){}
     
-    if (output.size() == infoRequested.size()) {
-        return output;
-    }else{
-        vector<string> Emptyoutput;
-        return Emptyoutput;
-    }
+    return output;
     
 }
 
+
+
+
+
 map<string, pair<int, long>> activeMACs;
+//map<string, vector<int>> MACcolors;
 //vector<string> orderedMACs;
+
+
+void wipeData(){
+    for(auto& x : activeMACs){
+        x.second.first = 0;
+    }
+}
+long currentTime(){
+    time_t  timev;
+    return time(&timev);
+}
+
+string isActive(const string& MAC, long KillThreshold){
+    if (currentTime() - activeMACs[MAC].second >= KillThreshold){
+        return "NO";
+    }else{
+        return "YES";
+    }
+}
+
+void processData(vector<string> data){
+    if (data.size() == 2) {
+        string MAC = data[0];
+        long timestamp = stol( data[1]);
+        
+        if (activeMACs.find(MAC) == activeMACs.end()) {
+//            generate a color here and assign to thing:
+            //not found:
+            pair <int,long> p (1,timestamp);
+            activeMACs[MAC] = p;
+//            push color into here: MACcolors(MAC)
+            
+//            orderedMACs.push_back(MAC);
+            // perhaps also put on ordered array
+        }else{
+            //found:
+            activeMACs[MAC].first += 1;
+            activeMACs[MAC].second = timestamp;
+        }
+    }
+}
+
+
 void printData(){
     string s = ":";
     for(auto x : activeMACs){
-//        cout << x.first << ": ";
+        //        cout << x.first << ": ";
         if (s == ":") {
             s = "|";
         }else if (s == "|"){
             s = ":";
         }
         for(int j = 0; j < x.second.first/3; j++){
-//            cout << "|";
+            //            cout << "|";
             cout << s;
         }
     }
@@ -124,32 +137,11 @@ void printData(){
 }
 
 void printDataNC(){
-    
-//    int x, y;
-//    getmaxyx(stdscr, y, x);
-//    int my = 0;
-//    int mx = x/2;
-//    
-//    for(int i = 0; i < 200; i++) {
-//        clear();
-//        mvprintw(my,mx - 8,"hello I am leon");
-//        refresh();
-//        my ++;
-//        if(my>y){
-//            my = 0;
-//        }
-//        usleep(300000);
-//        
-//    }
-    
     start_color();
-//    init_pair(1,COLOR_RED, COLOR_BLACK);
-//    attron(COLOR_PAIR(1));
-//    printw("Something");
     init_pair(1,COLOR_RED, COLOR_BLACK);
     init_pair(2,COLOR_CYAN, COLOR_BLACK);
     init_pair(3,COLOR_YELLOW, COLOR_BLACK);
-
+    
     int a = 1;
     for(auto x : activeMACs){
         if (a == 1) {
@@ -176,61 +168,10 @@ void printDataNC(){
         refresh();
     }
     printw("\n");
-//    cout << endl;
+    //    cout << endl;
     
     
-    
-    
-
-
-
-    
 }
-
-void wipeData(){
-    for(auto& x : activeMACs){
-        x.second.first = 0;
-    }
-}
-
-void processData(vector<string> data){
-    if (data.size() == 2) {
-        string MAC = data[0];
-        long timestamp = stol( data[1]);
-        
-        if (activeMACs.find(MAC) == activeMACs.end()) {
-            //not found:
-            pair <int,long> p (1,timestamp);
-            activeMACs[MAC] = p;
-//            orderedMACs.push_back(MAC);
-            // perhaps also put on ordered array
-        }else{
-            //found:
-            activeMACs[MAC].first += 1;
-            activeMACs[MAC].second = timestamp;
-        }
-    }
-}
-
-long currentTime(){
-    time_t  timev;
-    return time(&timev);
-}
-
-void updateDataMap(long KillThreshold){
-    vector<string> MACsToKill;
-    for (auto& x : activeMACs){
-        if (currentTime() - x.second.second > KillThreshold){
-            MACsToKill.push_back(x.first);
-        }
-    }
-    for (string& s : MACsToKill){
-        activeMACs.erase (s);
-//        orderedMACs.erase(std::remove(orderedMACs.begin(), orderedMACs.end(), s), orderedMACs.end());
-    }
-}
-
-
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -271,28 +212,39 @@ void startSniffing(std::string _interface, bool monitorMode){
     
     
     // now sniff:
-    int g = 0;
+//    int print_interval = 1; // in seconds
+//    long timeTrack = currentTime();
     
     try {
         int c = 0;
         while(Packet pkt = sniffer.next_packet()) {
             
-            vector<string> infoWanted = {"src", "timestamp"};
-            vector<string> pktData = returnFromData11(infoWanted, pkt);
+            vector<string> pktData = returnFromData11(pkt);
+//            for (auto& s : pktData){
+//                cout << s << endl;
+//            }
             processData(pktData); //creates map with times
-//            updateDataMap(2); // takes out non active MACs
-//            printData();
-            
-            
-            if (c > 600){
-//                cout << setw(4) << g << ":   ";
-                printDataNC();
-                c = 0;
-                g++;
-                wipeData();
+            for (auto& s : activeMACs){
+                cout << s.first << " || last active: " << currentTime() - s.second.second << " seconds ago" << " || active: " << isActive(s.first, 10) << endl;
             }
+            cout << "-----------" << endl;
+//            updateDataMap(10); // takes out non active MACs
+//
+//            
+//            
+//            if (c > 600){
+//                printDataNC();
+//                c = 0;
+//                wipeData();
+//            }
+//            c ++;
             
-            c ++;
+//            if (currentTime() - timeTrack > print_interval){
+//                printDataNC();
+//                wipeData();
+//                timeTrack = currentTime();
+//            }
+
             
         }
     }catch(...){}
@@ -303,13 +255,13 @@ void startSniffing(std::string _interface, bool monitorMode){
 
 int main(){
     //ncurses:
-    initscr();
-    curs_set(0);
-    scrollok(stdscr, TRUE);
+//    initscr();
+//    curs_set(0);
+//    scrollok(stdscr, TRUE);
     
     startSniffing("en0", true);
     
-    getch();
-    endwin();
-    return 0;
+//    getch();
+//    endwin();
+//    return 0;
 }
