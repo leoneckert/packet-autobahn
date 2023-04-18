@@ -7,3 +7,5 @@ compile with ```g++ main.cpp -o packet_autobahn -O3 -std=c++11 -lpthread -ltins 
 - alternative mode: line always filled with pipe symbols from left to right and colors representing the share of each individual device.
 
 ![screenshot](https://github.com/leoneckert/packet-autobahn/blob/master/in_progres_screenshot_1.png)
+
+.
